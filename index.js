@@ -13,7 +13,10 @@ const {
 
 const CLICKUP_API_TOKEN = process.env.CLICKUP_API_TOKEN;
 const CLICKUP_LIST_ID = process.env.CLICKUP_LIST_ID;
-const BUG_PREFIX = (process.env.BUG_PREFIX || '#bug').toLowerCase();
+const PREFIXES = (process.env.BUG_PREFIXES || process.env.BUG_PREFIX || '#bug,#improvement,#feature,#feedback')
+  .split(',')
+  .map((p) => p.trim().toLowerCase())
+  .filter(Boolean);
 const PORT = process.env.PORT || 3000;
 
 // Keep-alive HTTP server (required for Koyeb / Render free tier health checks)
@@ -22,7 +25,7 @@ let connectionStatus = 'starting';
 let latestQr = null;
 
 app.get('/', (_req, res) => {
-  res.json({ status: connectionStatus, prefix: BUG_PREFIX });
+  res.json({ status: connectionStatus, prefixes: PREFIXES });
 });
 
 app.get('/qr', (_req, res) => {
@@ -131,13 +134,17 @@ async function startBot() {
         msg.message.imageMessage?.caption ||
         '';
 
-      if (!text.trim().toLowerCase().startsWith(BUG_PREFIX)) continue;
+      const trimmed = text.trim();
+      const lower = trimmed.toLowerCase();
+      const matchedPrefix = PREFIXES.find((p) => lower.startsWith(p));
+      if (!matchedPrefix) continue;
 
-      const cleanText = text.trim().slice(BUG_PREFIX.length).trim();
+      const cleanText = trimmed.slice(matchedPrefix.length).trim();
       if (!cleanText) continue;
 
+      const tagLabel = matchedPrefix.replace(/^#/, '').toUpperCase();
       const senderName = msg.pushName || msg.key.participant || msg.key.remoteJid;
-      const title = `[BUG] ${cleanText.split('\n')[0].slice(0, 80)}`;
+      const title = `[${tagLabel}] ${cleanText.split('\n')[0].slice(0, 80)}`;
       const description = `${cleanText}\n\nPelapor: ${senderName}`;
 
       let imageBuffer = null;
@@ -157,7 +164,7 @@ async function startBot() {
         console.log(`Task created: ${created.name} (${created.url})`);
         await sock.sendMessage(
           msg.key.remoteJid,
-          { text: `✅ Bug dicatat ke ClickUp!\n${created.url}` },
+          { text: `✅ [${tagLabel}] dicatat ke ClickUp!\n${created.url}` },
           { quoted: msg }
         );
       } catch (err) {
