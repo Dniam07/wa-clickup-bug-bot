@@ -19,9 +19,24 @@ const PORT = process.env.PORT || 3000;
 // Keep-alive HTTP server (required for Koyeb / Render free tier health checks)
 const app = express();
 let connectionStatus = 'starting';
+let latestQr = null;
 
 app.get('/', (_req, res) => {
   res.json({ status: connectionStatus, prefix: BUG_PREFIX });
+});
+
+app.get('/qr', (_req, res) => {
+  if (!latestQr) {
+    return res.send(`<h3>Status: ${connectionStatus}</h3><p>QR belum tersedia atau sudah tersambung. Refresh beberapa detik lagi.</p>`);
+  }
+  const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(latestQr)}`;
+  res.send(`
+    <html><body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;">
+      <h2>Scan QR WhatsApp</h2>
+      <img src="${qrImgUrl}" alt="QR Code" />
+      <p>Status: ${connectionStatus}</p>
+    </body></html>
+  `);
 });
 
 app.listen(PORT, () => {
@@ -87,9 +102,9 @@ async function startBot() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
+      latestQr = qr;
       connectionStatus = 'waiting_for_qr_scan';
-      console.log('\nScan QR Code ini di WhatsApp (Linked Devices):\n');
-      qrcode.generate(qr, { small: true });
+      console.log('\nBuka /qr di browser untuk scan QR Code.\n');
     }
 
     if (connection === 'close') {
